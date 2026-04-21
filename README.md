@@ -36,7 +36,6 @@ jobs:
       - uses: hasanmansoor96/lighthouse-governance@v1
         with:
           package-manager: pnpm
-          pnpm-version: "10"
           node-version: "20"
           start-server-command: pnpm start --hostname=127.0.0.1 --port=3100
           route-config-file: lighthouse-governance.config.json
@@ -47,6 +46,8 @@ jobs:
           tbt-max-ms: "200"
           cls-max: "0.1"
 ```
+
+When a project has a `packageManager` field in `package.json`, leave `pnpm-version` unset so `pnpm/action-setup` can use that pinned version. Set `pnpm-version` only for pnpm projects without a package manager pin.
 
 
 ## Route Configuration

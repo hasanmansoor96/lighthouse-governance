@@ -11,9 +11,9 @@ inputs:
     required: false
     default: "npm"
   pnpm-version:
-    description: pnpm version to install when package-manager is pnpm.
+    description: Optional pnpm version to install when package-manager is pnpm. Leave blank to use packageManager from package.json.
     required: false
-    default: "10"
+    default: ""
   node-version:
     description: Node.js version used for install/build/LHCI.
     required: false
@@ -138,11 +138,15 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Setup pnpm
-      if: ${{ inputs.package-manager == 'pnpm' }}
+    - name: Setup pnpm from input
+      if: ${{ inputs.package-manager == 'pnpm' && inputs.pnpm-version != '' }}
       uses: pnpm/action-setup@v4
       with:
         version: ${{ inputs.pnpm-version }}
+
+    - name: Setup pnpm from package.json
+      if: ${{ inputs.package-manager == 'pnpm' && inputs.pnpm-version == '' }}
+      uses: pnpm/action-setup@v4
 
     - name: Setup Node.js
       uses: actions/setup-node@v4
