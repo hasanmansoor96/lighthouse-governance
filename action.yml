@@ -201,7 +201,7 @@ runs:
             return
           fi
           case "$PACKAGE_MANAGER" in
-            pnpm) printf '%s\n' "pnpm start -- --hostname=127.0.0.1 --port=$PORT" ;;
+            pnpm) printf '%s\n' "pnpm start --hostname=127.0.0.1 --port=$PORT" ;;
             yarn) printf '%s\n' "yarn start --hostname=127.0.0.1 --port=$PORT" ;;
             npm) printf '%s\n' "npm run start -- --hostname=127.0.0.1 --port=$PORT" ;;
             none) ;;

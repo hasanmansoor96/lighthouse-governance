@@ -33,12 +33,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: hasanmansoor96/lighthouse-governance@v1
+      - uses: your-org/lighthouse-governance@v1
         with:
           package-manager: pnpm
           pnpm-version: "10"
           node-version: "20"
-          start-server-command: pnpm start -- --hostname=127.0.0.1 --port=3100
+          start-server-command: pnpm start --hostname=127.0.0.1 --port=3100
           route-config-file: lighthouse-governance.config.json
           performance-min-score: "0.85"
           accessibility-min-score: "0.95"
@@ -47,6 +47,8 @@ jobs:
           tbt-max-ms: "200"
           cls-max: "0.1"
 ```
+
+Replace `your-org/lighthouse-governance@v1` with the final owner, repo, and tag.
 
 ## Route Configuration
 
