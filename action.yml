@@ -83,7 +83,7 @@ inputs:
     required: false
     default: "1"
   lhci-version:
-    description: @lhci/cli version used by npx.
+    description: "@lhci/cli version used by npx."
     required: false
     default: "0.13.0"
   upload-target:
