@@ -28,8 +28,7 @@
   ],
   "dynamicRoutes": {
     "/blog/[game]": [
-      "/blog/gta6",
-      "/blog/gta5"
+      "/blog/gta6"
     ]
   },
   "excludePrefixes": [
