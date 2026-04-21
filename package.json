@@ -1,0 +1,19 @@
+{
+  "name": "lighthouse-governance",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Reusable Lighthouse CI governance action for route discovery and threshold enforcement.",
+  "bin": {
+    "lighthouse-governance": "bin/lighthouse-governance.mjs"
+  },
+  "scripts": {
+    "test": "node --test",
+    "routes": "node bin/lighthouse-governance.mjs routes --stdout",
+    "config": "node bin/lighthouse-governance.mjs config --stdout"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

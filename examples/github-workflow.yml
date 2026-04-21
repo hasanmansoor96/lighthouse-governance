@@ -1,0 +1,36 @@
+name: lighthouse-governance
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Lighthouse governance
+        uses: your-org/lighthouse-governance@v1
+        with:
+          package-manager: pnpm
+          pnpm-version: "10"
+          node-version: "20"
+          base-url: http://127.0.0.1:3100
+          start-server-command: pnpm start -- --hostname=127.0.0.1 --port=3100
+          route-config-file: lighthouse-governance.config.json
+          profile: desktop
+          performance-min-score: "0.85"
+          accessibility-min-score: "0.95"
+          seo-min-score: "0.95"
+          lcp-max-ms: "2500"
+          tbt-max-ms: "200"
+          cls-max: "0.1"
+          errors-in-console-min-score: "1"
+          enforce-best-practices-allowlist: "true"

@@ -1,0 +1,44 @@
+{
+  "routes": [
+    "/",
+    "/about",
+    "/blog",
+    "/contact",
+    "/guides",
+    "/maps",
+    "/maps/gta-6-interactive-map",
+    "/maps/gta-5-interactive-map",
+    "/maps/gta-5-online-interactive-map",
+    "/maps/gta-4-interactive-map",
+    "/maps/gta-san-andreas-interactive-map",
+    "/maps/gta-vice-city-interactive-map",
+    "/maps/gta-3-interactive-map",
+    "/privacy-policy",
+    "/unsubscribe",
+    "/verify",
+    "/when-will-gta-6-release"
+  ],
+  "mobileRoutes": [
+    "/",
+    "/guides",
+    "/maps",
+    "/guides/gta-5-all-for-sale-signs-collection-guide",
+    "/maps/gta-5-interactive-map",
+    "/maps/gta-6-interactive-map"
+  ],
+  "dynamicRoutes": {
+    "/blog/[game]": [
+      "/blog/gta6",
+      "/blog/gta5"
+    ]
+  },
+  "excludePrefixes": [
+    "/api",
+    "/admin"
+  ],
+  "excludeRoutes": [
+    "/maps/editor"
+  ],
+  "includeSitemap": false,
+  "failOnUnresolvedDynamicRoutes": false
+}
