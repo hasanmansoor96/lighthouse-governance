@@ -33,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: your-org/lighthouse-governance@v1
+      - uses: hasanmansoor96/lighthouse-governance@v1
         with:
           package-manager: pnpm
           pnpm-version: "10"
@@ -48,7 +48,6 @@ jobs:
           cls-max: "0.1"
 ```
 
-Replace `your-org/lighthouse-governance@v1` with the final owner, repo, and tag.
 
 ## Route Configuration
 
