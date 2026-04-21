@@ -55,15 +55,15 @@ Create `lighthouse-governance.config.json` in the audited project when route dis
 
 ```json
 {
-  "routes": ["/", "/blog", "/maps"],
-  "desktopRoutes": ["/maps/gta-6-interactive-map"],
-  "mobileRoutes": ["/maps/gta-6-interactive-map"],
+  "routes": ["/", "/blog", "/docs"],
+  "desktopRoutes": ["/products/featured"],
+  "mobileRoutes": ["/docs/getting-started"],
   "dynamicRoutes": {
-    "/blog/[game]": ["/blog/gta6", "/blog/gta5"],
-    "/blog/[game]/[slug]": ["/blog/gta6/trailers"]
+    "/blog/[slug]": ["/blog/launch-notes"],
+    "/docs/[section]/[slug]": ["/docs/guides/setup"]
   },
   "excludePrefixes": ["/api", "/admin"],
-  "excludeRoutes": ["/maps/editor"],
+  "excludeRoutes": ["/preview"],
   "includeSitemap": false,
   "failOnUnresolvedDynamicRoutes": false
 }
@@ -71,7 +71,7 @@ Create `lighthouse-governance.config.json` in the audited project when route dis
 
 If the action input `routes` or `routes-file` is set, those configured routes are audited instead of route discovery.
 
-The `examples/gta6map-lighthouse-governance.config.json` file preserves the current GTA6map desktop/mobile route seeds and dynamic `/blog/[game]` samples in the new reusable format.
+See `examples/lighthouse-governance.config.json` for a project-neutral starter config.
 
 ## Local Commands
 

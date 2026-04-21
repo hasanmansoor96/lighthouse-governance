@@ -2,21 +2,20 @@
   "routes": [
     "/",
     "/blog",
-    "/maps"
+    "/docs"
   ],
   "desktopRoutes": [
-    "/maps/gta-6-interactive-map"
+    "/products/featured"
   ],
   "mobileRoutes": [
-    "/maps/gta-6-interactive-map"
+    "/docs/getting-started"
   ],
   "dynamicRoutes": {
-    "/blog/[game]": [
-      "/blog/gta6",
-      "/blog/gta5"
+    "/blog/[slug]": [
+      "/blog/launch-notes"
     ],
-    "/blog/[game]/[slug]": [
-      "/blog/gta6/trailers"
+    "/docs/[section]/[slug]": [
+      "/docs/guides/setup"
     ]
   },
   "excludePrefixes": [
@@ -24,7 +23,7 @@
     "/admin"
   ],
   "excludeRoutes": [
-    "/maps/editor"
+    "/preview"
   ],
   "includeSitemap": false,
   "failOnUnresolvedDynamicRoutes": false
