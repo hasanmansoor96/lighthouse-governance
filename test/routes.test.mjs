@@ -145,3 +145,68 @@ test("changed-routes-only prefers dirty working-tree route files", async () => {
   assert.deepEqual(manifest.routes, ["/maps/gta-6"])
   assert.equal(manifest.sources.changedFilesSource, "git:working-tree")
 })
+
+test("JavaScript route config is disabled unless explicitly allowed", async () => {
+  const projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), "lg-routes-js-config-"))
+  const markerPath = path.join(projectRoot, "executed.txt")
+
+  await fs.writeFile(
+    path.join(projectRoot, "lighthouse-governance.config.mjs"),
+    `import fs from "node:fs"
+fs.writeFileSync(new URL("./executed.txt", import.meta.url), "yes")
+export default { routes: ["/trusted"] }
+`,
+    "utf8",
+  )
+
+  await assert.rejects(
+    () => generateRouteManifest({
+      projectRoot,
+      configPath: "lighthouse-governance.config.mjs",
+      includeSitemap: false,
+    }),
+    /JavaScript route config is disabled/u,
+  )
+  await assert.rejects(() => fs.access(markerPath), /ENOENT/u)
+
+  const manifest = await generateRouteManifest({
+    projectRoot,
+    configPath: "lighthouse-governance.config.mjs",
+    allowJsConfig: true,
+    includeSitemap: false,
+  })
+
+  assert.deepEqual(manifest.routes, ["/trusted"])
+  assert.equal(await fs.readFile(markerPath, "utf8"), "yes")
+})
+
+test("absolute audit URLs are restricted to base origin or allowed hosts", async () => {
+  const projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), "lg-routes-external-"))
+
+  await assert.rejects(
+    () => generateRouteManifest({
+      projectRoot,
+      routes: ["http://169.254.169.254/latest/meta-data"],
+      baseUrl: "http://127.0.0.1:3100",
+      includeSitemap: false,
+    }),
+    /External audit URLs are not allowed/u,
+  )
+
+  const sameOrigin = await generateRouteManifest({
+    projectRoot,
+    routes: ["https://app.example.test/docs"],
+    baseUrl: "https://app.example.test",
+    includeSitemap: false,
+  })
+  assert.deepEqual(sameOrigin.routes, ["https://app.example.test/docs"])
+
+  const allowedHost = await generateRouteManifest({
+    projectRoot,
+    routes: ["https://docs.example.test/start"],
+    baseUrl: "https://app.example.test",
+    allowedUrlHosts: "docs.example.test",
+    includeSitemap: false,
+  })
+  assert.deepEqual(allowedHost.routes, ["https://docs.example.test/start"])
+})

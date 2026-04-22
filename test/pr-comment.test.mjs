@@ -36,6 +36,7 @@ test("createPrCommentBody includes run metadata and captured Lighthouse output",
     routeCount: "20",
     profile: "desktop",
     workflowUrl: "https://github.com/example/repo/actions/runs/1",
+    includeOutput: true,
   })
 
   assert.match(body, new RegExp(PR_COMMENT_MARKER, "u"))
@@ -46,4 +47,40 @@ test("createPrCommentBody includes run metadata and captured Lighthouse output",
   assert.match(body, /````diff/u)
   assert.match(body, /done running Lighthouse!/u)
   assert.doesNotMatch(body, /\u001B/u)
+})
+
+test("createPrCommentBody omits captured output by default", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "lighthouse-governance-"))
+  const lhciDir = path.join(tempDir, ".lighthouseci")
+  await fs.mkdir(lhciDir)
+  await fs.writeFile(path.join(lhciDir, "lhci-output.log"), "SECRET_TOKEN=should-not-be-posted\n", "utf8")
+  await fs.writeFile(path.join(lhciDir, "lhci-exit-code.txt"), "0\n", "utf8")
+
+  const body = await createPrCommentBody({
+    workingDirectory: tempDir,
+    commitSha: "1234567890abcdef",
+    routeCount: "1",
+    profile: "desktop",
+  })
+
+  assert.match(body, /Status: `passed`/u)
+  assert.match(body, /output is omitted/u)
+  assert.doesNotMatch(body, /SECRET_TOKEN/u)
+  assert.doesNotMatch(body, /````diff/u)
+})
+
+test("createPrCommentBody uses a longer fence than captured backticks", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "lighthouse-governance-"))
+  const lhciDir = path.join(tempDir, ".lighthouseci")
+  await fs.mkdir(lhciDir)
+  await fs.writeFile(path.join(lhciDir, "lhci-output.log"), "````\ninjected markdown\n", "utf8")
+  await fs.writeFile(path.join(lhciDir, "lhci-exit-code.txt"), "1\n", "utf8")
+
+  const body = await createPrCommentBody({
+    workingDirectory: tempDir,
+    includeOutput: true,
+  })
+
+  assert.match(body, /`````diff/u)
+  assert.match(body, / ````/u)
 })

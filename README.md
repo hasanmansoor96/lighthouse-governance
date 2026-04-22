@@ -11,8 +11,8 @@ Reusable Lighthouse CI governance for web projects. The action builds a project,
 - Generates an LHCI config with score and metric thresholds.
 - Fails GitHub Actions when LHCI assertions fail.
 - Optionally enforces an actionable Best Practices allowlist.
-- Posts or updates a pull request comment with the captured Lighthouse CI output and triggering commit SHA.
-- Uploads `.lighthouseci` reports as workflow artifacts.
+- Posts or updates a pull request comment with Lighthouse status metadata and triggering commit SHA.
+- Can upload `.lighthouseci` reports as workflow artifacts.
 
 ## Use In A Project
 
@@ -31,7 +31,6 @@ on:
 permissions:
   contents: read
   issues: write
-  pull-requests: write
 
 jobs:
   lighthouse:
@@ -56,7 +55,7 @@ jobs:
           cls-max: "0.1"
 ```
 
-Pull request comments are enabled by default for `pull_request` and `pull_request_target` events. The action updates a single sticky comment with the latest Lighthouse CI output, route count, profile, workflow run link, and the PR head commit SHA that produced the stats. Set `pr-comment: "false"` to disable this. The comment step is non-blocking; if the workflow token cannot write PR comments, the audit still runs and emits a warning.
+Pull request comments are enabled by default for `pull_request` events. The action updates a single sticky comment with status, route count, profile, workflow run link, and the PR head commit SHA that produced the stats. Captured Lighthouse output is omitted from the PR comment by default to avoid publishing logs; set `pr-comment-include-output: "true"` only for trusted workflows. Set `pr-comment: "false"` to disable comments entirely. The comment step is non-blocking; if the workflow token cannot write PR comments, the audit still runs and emits a warning.
 
 The action installs its own locked `@lhci/cli@0.15.1` runner with npm overrides for deprecated transitive dependencies. `lhci-version` may be left as `latest` or set to `0.15.1`; other versions fail fast because they would bypass the verified dependency tree.
 
@@ -86,6 +85,18 @@ Create `lighthouse-governance.config.json` in the audited project when route dis
 If the action input `routes` or `routes-file` is set, those configured routes are audited instead of route discovery.
 
 See `examples/lighthouse-governance.config.json` for a project-neutral starter config.
+
+JavaScript route config files (`.mjs` and `.cjs`) are disabled by default because they execute code from the checked-out repository. Prefer JSON config in CI. If you need JavaScript config for trusted code, set `allow-js-config: "true"`.
+
+Absolute audit URLs are restricted by default. Relative routes are resolved against `base-url`, and absolute routes must match that same origin. To audit additional trusted hosts, set `allowed-url-hosts` to a comma-separated list such as `docs.example.com,app.example.com:8443`. Use `allow-external-urls: "true"` only in trusted workflows.
+
+## Security Defaults
+
+This action builds and runs repository code, so do not run it on untrusted fork code with `pull_request_target`. The action refuses `pull_request_target` by default. If you have a trusted checkout pattern and understand the token/secret exposure, set `allow-pull-request-target: "true"`.
+
+The recommended token permissions are `contents: read` and, only when PR comments are enabled, `issues: write`. `pull-requests: write` is not required for the built-in sticky issue comment.
+
+Workflow artifacts are disabled by default because `.lighthouseci` can contain logs, page URLs, report JSON, and screenshots from the audited app. Set `upload-artifact: "true"` when those reports are safe to share with everyone who can read workflow artifacts.
 
 ## Changed Routes Only
 

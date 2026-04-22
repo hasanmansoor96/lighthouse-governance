@@ -16,6 +16,11 @@ Commands:
   routes          Generate .lighthouseci/routes.json from configured routes and/or project route discovery.
   config          Generate .lighthouseci/lighthouserc.cjs with threshold assertions.
   best-practices  Fail on non-allowlisted Best Practices audit failures in Lighthouse reports.
+
+Security-related route options:
+  --allow-js-config       Execute .mjs/.cjs route config. Use only for trusted configs.
+  --allowed-url-hosts     Comma-separated hosts/origins allowed for absolute audit URLs.
+  --allow-external-urls   Allow all absolute audit URLs. Use only for trusted workflows.
 `
 }
 
@@ -85,6 +90,9 @@ async function runRoutes(options) {
     changedFiles: options.changedFiles,
     changedBase: options.changedBase || options.changedBaseRef,
     changedHead: options.changedHead || options.changedHeadRef,
+    allowJsConfig: booleanOption(options.allowJsConfig, options.allowJavaScriptConfig),
+    allowedUrlHosts: options.allowedUrlHosts,
+    allowExternalUrls: booleanOption(options.allowExternalUrls),
   })
 
   if (options.stdout) {

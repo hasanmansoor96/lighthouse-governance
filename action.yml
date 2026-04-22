@@ -62,6 +62,10 @@ inputs:
     description: Optional lighthouse-governance config file.
     required: false
     default: ""
+  allow-js-config:
+    description: Allow .mjs/.cjs route config execution. Only enable for trusted code.
+    required: false
+    default: "false"
   app-dir:
     description: Comma-separated Next app directories to scan.
     required: false
@@ -72,6 +76,14 @@ inputs:
     default: "pages,src/pages"
   include-sitemap:
     description: Whether to read /sitemap.xml from base-url and include those routes.
+    required: false
+    default: "false"
+  allowed-url-hosts:
+    description: Comma-separated hostnames, host:port values, or origins allowed for absolute audit URLs beyond base-url.
+    required: false
+    default: ""
+  allow-external-urls:
+    description: Allow all absolute audit URLs. Only enable for trusted workflows.
     required: false
     default: "false"
   fail-on-unresolved-dynamic-routes:
@@ -141,11 +153,19 @@ inputs:
   upload-artifact:
     description: Upload .lighthouseci as a workflow artifact.
     required: false
-    default: "true"
+    default: "false"
   pr-comment:
-    description: Post or update a pull request comment with the Lighthouse CI output and triggering commit SHA.
+    description: Post or update a pull request comment with Lighthouse status metadata and triggering commit SHA.
     required: false
     default: "true"
+  pr-comment-include-output:
+    description: Include captured Lighthouse CI output in the PR comment. Disabled by default to avoid leaking logs.
+    required: false
+    default: "false"
+  allow-pull-request-target:
+    description: Allow this action to run on pull_request_target. Only enable for trusted code checkout patterns.
+    required: false
+    default: "false"
 
 outputs:
   route-count:
@@ -155,6 +175,13 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Refuse pull_request_target by default
+      if: ${{ github.event_name == 'pull_request_target' && inputs.allow-pull-request-target != 'true' }}
+      shell: bash
+      run: |
+        echo "::error::lighthouse-governance refuses pull_request_target by default because this action builds and runs repository code. Use pull_request, or set allow-pull-request-target: true only with a trusted checkout pattern."
+        exit 1
+
     - name: Setup pnpm from input
       if: ${{ inputs.package-manager == 'pnpm' && inputs.pnpm-version != '' }}
       uses: pnpm/action-setup@v4
@@ -182,6 +209,30 @@ runs:
       run: |
         set -euo pipefail
 
+        case "$PACKAGE_MANAGER" in
+          pnpm|yarn|npm|none) ;;
+          *)
+            echo "::error::Unsupported package-manager '$PACKAGE_MANAGER'. Use npm, pnpm, yarn, or none."
+            exit 1
+            ;;
+        esac
+
+        if [ -n "$PORT" ] && ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
+          echo "::error::port must be numeric."
+          exit 1
+        fi
+
+        write_env() {
+          local name="$1"
+          local value="$2"
+          local delimiter="LG_ENV_${RANDOM}_${RANDOM}_$$"
+          {
+            printf '%s<<%s\n' "$name" "$delimiter"
+            printf '%s\n' "$value"
+            printf '%s\n' "$delimiter"
+          } >> "$GITHUB_ENV"
+        }
+
         resolve_install_command() {
           if [ "$INSTALL_COMMAND_INPUT" = "skip" ]; then
             return
@@ -195,7 +246,6 @@ runs:
             yarn) printf '%s\n' "yarn install --frozen-lockfile" ;;
             npm) printf '%s\n' "npm ci" ;;
             none) ;;
-            *) printf '%s\n' "$PACKAGE_MANAGER install" ;;
           esac
         }
 
@@ -212,7 +262,6 @@ runs:
             yarn) printf '%s\n' "yarn build" ;;
             npm) printf '%s\n' "npm run build" ;;
             none) ;;
-            *) printf '%s\n' "$PACKAGE_MANAGER run build" ;;
           esac
         }
 
@@ -226,15 +275,12 @@ runs:
             yarn) printf '%s\n' "yarn start --hostname=127.0.0.1 --port=$PORT" ;;
             npm) printf '%s\n' "npm run start -- --hostname=127.0.0.1 --port=$PORT" ;;
             none) ;;
-            *) printf '%s\n' "$PACKAGE_MANAGER run start -- --hostname=127.0.0.1 --port=$PORT" ;;
           esac
         }
 
-        {
-          echo "LG_INSTALL_COMMAND=$(resolve_install_command)"
-          echo "LG_BUILD_COMMAND=$(resolve_build_command)"
-          echo "LHCI_START_SERVER_COMMAND=$(resolve_start_command)"
-        } >> "$GITHUB_ENV"
+        write_env "LG_INSTALL_COMMAND" "$(resolve_install_command)"
+        write_env "LG_BUILD_COMMAND" "$(resolve_build_command)"
+        write_env "LHCI_START_SERVER_COMMAND" "$(resolve_start_command)"
 
     - name: Install dependencies
       shell: bash
@@ -264,9 +310,12 @@ runs:
         ROUTES: ${{ inputs.routes }}
         ROUTES_FILE_INPUT: ${{ inputs.routes-file }}
         ROUTE_CONFIG_FILE: ${{ inputs.route-config-file }}
+        ALLOW_JS_CONFIG: ${{ inputs.allow-js-config }}
         APP_DIR: ${{ inputs.app-dir }}
         PAGES_DIR: ${{ inputs.pages-dir }}
         INCLUDE_SITEMAP: ${{ inputs.include-sitemap }}
+        ALLOWED_URL_HOSTS: ${{ inputs.allowed-url-hosts }}
+        ALLOW_EXTERNAL_URLS: ${{ inputs.allow-external-urls }}
         FAIL_ON_UNRESOLVED_DYNAMIC_ROUTES: ${{ inputs.fail-on-unresolved-dynamic-routes }}
         CHANGED_ROUTES_ONLY: ${{ inputs.changed-routes-only }}
         CHANGED_FILES: ${{ inputs.changed-files }}
@@ -293,8 +342,17 @@ runs:
         if [ -n "$ROUTE_CONFIG_FILE" ]; then
           args+=(--config "$ROUTE_CONFIG_FILE")
         fi
+        if [ "$ALLOW_JS_CONFIG" = "true" ]; then
+          args+=(--allow-js-config)
+        fi
         if [ "$INCLUDE_SITEMAP" = "true" ]; then
           args+=(--include-sitemap)
+        fi
+        if [ -n "$ALLOWED_URL_HOSTS" ]; then
+          args+=(--allowed-url-hosts "$ALLOWED_URL_HOSTS")
+        fi
+        if [ "$ALLOW_EXTERNAL_URLS" = "true" ]; then
+          args+=(--allow-external-urls)
         fi
         if [ "$FAIL_ON_UNRESOLVED_DYNAMIC_ROUTES" = "true" ]; then
           args+=(--fail-on-unresolved-dynamic-routes)
@@ -416,14 +474,15 @@ runs:
           --report-dir ".lighthouseci" \
           --allowlist "$BEST_PRACTICES_ALLOWLIST"
 
-    - name: Comment Lighthouse output on PR
-      if: ${{ always() && inputs.pr-comment == 'true' && steps.routes.outputs.route-count != '0' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') }}
+    - name: Comment Lighthouse status on PR
+      if: ${{ always() && inputs.pr-comment == 'true' && steps.routes.outputs.route-count != '' && steps.routes.outputs.route-count != '0' && (github.event_name == 'pull_request' || (github.event_name == 'pull_request_target' && inputs.allow-pull-request-target == 'true')) }}
       uses: actions/github-script@v7
       env:
         LG_ACTION_PATH: ${{ github.action_path }}
         LG_WORKING_DIRECTORY: ${{ inputs.working-directory }}
         LG_ROUTE_COUNT: ${{ steps.routes.outputs.route-count }}
         LG_PROFILE: ${{ inputs.profile }}
+        LG_PR_COMMENT_INCLUDE_OUTPUT: ${{ inputs.pr-comment-include-output }}
       with:
         script: |
           const path = require("node:path")
@@ -457,6 +516,7 @@ runs:
               routeCount: process.env.LG_ROUTE_COUNT,
               profile: process.env.LG_PROFILE,
               workflowUrl,
+              includeOutput: process.env.LG_PR_COMMENT_INCLUDE_OUTPUT === "true",
             })
 
             const comments = await github.paginate(github.rest.issues.listComments, {
