@@ -392,3 +392,4 @@ runs:
       with:
         name: lighthouse-governance-artifacts
         path: ${{ inputs.working-directory }}/.lighthouseci
+        include-hidden-files: true
