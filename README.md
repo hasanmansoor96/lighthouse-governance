@@ -149,3 +149,8 @@ The action exposes these inputs and mirrors them to the generated LHCI config:
 - `errors-in-console-min-score`, default `1`
 
 Empty threshold inputs are skipped.
+
+## Contributors
+
+- [Hasan Mansoor](https://github.com/hasanmansoor96)
+- [Kausar Ahmad](https://github.com/kausarahmad)
