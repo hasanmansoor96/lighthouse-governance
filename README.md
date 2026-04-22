@@ -44,6 +44,7 @@ jobs:
         with:
           package-manager: pnpm
           node-version: "20"
+          lhci-version: "0.15.1"
           start-server-command: pnpm start --hostname=127.0.0.1 --port=3100
           route-config-file: lighthouse-governance.config.json
           changed-routes-only: "false"
@@ -56,6 +57,8 @@ jobs:
 ```
 
 Pull request comments are enabled by default for `pull_request` and `pull_request_target` events. The action updates a single sticky comment with the latest Lighthouse CI output, route count, profile, workflow run link, and the PR head commit SHA that produced the stats. Set `pr-comment: "false"` to disable this. The comment step is non-blocking; if the workflow token cannot write PR comments, the audit still runs and emits a warning.
+
+By default, `lhci-version` uses the latest `@lhci/cli` npm dist tag. Pin a version such as `0.15.1` when reproducible CI installs are more important than automatically receiving the newest LHCI release.
 
 When a project has a `packageManager` field in `package.json`, leave `pnpm-version` unset so `pnpm/action-setup` can use that pinned version. Set `pnpm-version` only for pnpm projects without a package manager pin.
 

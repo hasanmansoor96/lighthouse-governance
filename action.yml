@@ -91,9 +91,9 @@ inputs:
     required: false
     default: "1"
   lhci-version:
-    description: "@lhci/cli version used by npx."
+    description: "@lhci/cli version used by npx. Use latest for the npm dist tag or pin an exact version for reproducible CI."
     required: false
-    default: "0.13.0"
+    default: "latest"
   upload-target:
     description: LHCI upload target.
     required: false
