@@ -3,10 +3,24 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import test from "node:test"
-import { createPrCommentBody, PR_COMMENT_MARKER, stripAnsi } from "../lib/pr-comment.mjs"
+import { createPrCommentBody, formatLhciOutputForGitHub, PR_COMMENT_MARKER, stripAnsi } from "../lib/pr-comment.mjs"
 
 test("stripAnsi removes terminal color codes from LHCI output", () => {
   assert.equal(stripAnsi("\u001B[31mfailed\u001B[0m"), "failed")
+})
+
+test("formatLhciOutputForGitHub maps LHCI result lines to diff colors", () => {
+  const output = formatLhciOutputForGitHub(`✘ categories.performance failure for minScore assertion
+      expected: >=0.85
+         found: 0.84
+✅ Configuration file found
+Assertion failed. Exiting with status code 1.`)
+
+  assert.match(output, /^-✘ categories\.performance failure/u)
+  assert.match(output, /^\+      expected: >=0\.85/mu)
+  assert.match(output, /^-         found: 0\.84/mu)
+  assert.match(output, /^\+✅ Configuration file found/mu)
+  assert.match(output, /^-Assertion failed\. Exiting with status code 1\./mu)
 })
 
 test("createPrCommentBody includes run metadata and captured Lighthouse output", async () => {
@@ -29,6 +43,7 @@ test("createPrCommentBody includes run metadata and captured Lighthouse output",
   assert.match(body, /Status: `failed`/u)
   assert.match(body, /Routes audited: `20`/u)
   assert.match(body, /Profile: `desktop`/u)
+  assert.match(body, /````diff/u)
   assert.match(body, /done running Lighthouse!/u)
   assert.doesNotMatch(body, /\u001B/u)
 })
