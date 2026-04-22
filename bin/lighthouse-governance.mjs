@@ -63,6 +63,10 @@ function toRoutes(value) {
   return splitList(value)
 }
 
+function booleanOption(...values) {
+  return values.some((value) => value === true || value === "true")
+}
+
 async function runRoutes(options) {
   const result = await writeRouteManifest({
     projectRoot: options.projectRoot,
@@ -77,6 +81,10 @@ async function runRoutes(options) {
     includeSitemap: options.includeSitemap === true || options.includeSitemap === "true",
     failOnUnresolvedDynamicRoutes:
       options.failOnUnresolvedDynamicRoutes === true || options.failOnUnresolvedDynamicRoutes === "true",
+    changedRoutesOnly: booleanOption(options.changedRoutesOnly, options.onlyChangedRoutes),
+    changedFiles: options.changedFiles,
+    changedBase: options.changedBase || options.changedBaseRef,
+    changedHead: options.changedHead || options.changedHeadRef,
   })
 
   if (options.stdout) {

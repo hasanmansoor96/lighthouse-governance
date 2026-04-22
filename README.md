@@ -7,6 +7,7 @@ Reusable Lighthouse CI governance for web projects. The action builds a project,
 - Discovers static routes from `app`, `src/app`, `pages`, and `src/pages`.
 - Uses configured route samples for dynamic routes such as `/blog/[slug]`.
 - Allows fully configured route lists through an action input, JSON file, or config file.
+- Can limit audits to routes changed by the triggering diff.
 - Generates an LHCI config with score and metric thresholds.
 - Fails GitHub Actions when LHCI assertions fail.
 - Optionally enforces an actionable Best Practices allowlist.
@@ -39,6 +40,7 @@ jobs:
           node-version: "20"
           start-server-command: pnpm start --hostname=127.0.0.1 --port=3100
           route-config-file: lighthouse-governance.config.json
+          changed-routes-only: "false"
           performance-min-score: "0.85"
           accessibility-min-score: "0.95"
           seo-min-score: "0.95"
@@ -66,6 +68,7 @@ Create `lighthouse-governance.config.json` in the audited project when route dis
   "excludePrefixes": ["/api", "/admin"],
   "excludeRoutes": ["/preview"],
   "includeSitemap": false,
+  "changedRoutesOnly": false,
   "failOnUnresolvedDynamicRoutes": false
 }
 ```
@@ -74,12 +77,34 @@ If the action input `routes` or `routes-file` is set, those configured routes ar
 
 See `examples/lighthouse-governance.config.json` for a project-neutral starter config.
 
+## Changed Routes Only
+
+Set `changed-routes-only: "true"` to audit only Next.js routes touched by the pull request, push, or local commit diff:
+
+```yaml
+- uses: hasanmansoor96/lighthouse-governance@v1
+  with:
+    package-manager: pnpm
+    route-config-file: lighthouse-governance.config.json
+    changed-routes-only: "true"
+```
+
+This mode maps changed files under configured `app`/`pages` directories to routes. Dynamic route files still need samples in `dynamicRoutes`; for example a changed `/blog/[slug]` page audits the configured `/blog/launch-notes` sample. If no route is selected, the generated manifest has `routeCount: 0` and the action skips LHCI and Best Practices checks.
+
+By default, changed files are inferred from the GitHub event and local Git history. For custom triggers, pass a comma- or newline-separated list through `changed-files`.
+
 ## Local Commands
 
 Generate routes:
 
 ```bash
 node bin/lighthouse-governance.mjs routes --project-root /path/to/project --output .lighthouseci/routes.json
+```
+
+Generate only routes touched by an explicit changed-file list:
+
+```bash
+node bin/lighthouse-governance.mjs routes --project-root /path/to/project --changed-routes-only --changed-files "app/blog/page.tsx,app/blog/[slug]/page.tsx"
 ```
 
 Generate LHCI config:

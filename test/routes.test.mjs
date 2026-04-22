@@ -56,3 +56,56 @@ test("explicit routes override discovery", async () => {
   assert.deepEqual(manifest.routes, ["/one", "/two"])
   assert.equal(manifest.sources.discoveredStaticRoutes, 0)
 })
+
+test("changed-routes-only audits changed static routes and dynamic samples", async () => {
+  const projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), "lg-routes-changed-"))
+
+  await touch(path.join(projectRoot, "app/page.tsx"))
+  await touch(path.join(projectRoot, "app/blog/page.tsx"))
+  await touch(path.join(projectRoot, "app/blog/[slug]/page.tsx"))
+  await touch(path.join(projectRoot, "app/about/page.tsx"))
+
+  await fs.writeFile(
+    path.join(projectRoot, ".lighthouse-governance.json"),
+    `${JSON.stringify(
+      {
+        dynamicRoutes: {
+          "/blog/[slug]": ["/blog/first-post"],
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  )
+
+  const manifest = await generateRouteManifest({
+    projectRoot,
+    changedRoutesOnly: true,
+    changedFiles: ["app/blog/page.tsx", "app/blog/[slug]/page.tsx"],
+    includeSitemap: false,
+  })
+
+  assert.deepEqual(manifest.routes, ["/blog", "/blog/first-post"])
+  assert.equal(manifest.routeCount, 2)
+  assert.equal(manifest.sources.changedRoutesOnly, true)
+  assert.equal(manifest.sources.changedFiles, 2)
+  assert.equal(manifest.sources.changedStaticRoutes, 1)
+  assert.equal(manifest.sources.changedDynamicRoutes, 1)
+})
+
+test("changed-routes-only returns an empty manifest when no route changed", async () => {
+  const projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), "lg-routes-unchanged-"))
+  await touch(path.join(projectRoot, "app/page.tsx"))
+
+  const manifest = await generateRouteManifest({
+    projectRoot,
+    changedRoutesOnly: true,
+    changedFiles: ["README.md"],
+    includeSitemap: false,
+  })
+
+  assert.deepEqual(manifest.routes, [])
+  assert.equal(manifest.routeCount, 0)
+  assert.equal(manifest.sources.changedRoutesOnly, true)
+})

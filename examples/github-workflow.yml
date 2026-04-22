@@ -24,6 +24,7 @@ jobs:
           base-url: http://127.0.0.1:3100
           start-server-command: pnpm start --hostname=127.0.0.1 --port=3100
           route-config-file: lighthouse-governance.config.json
+          changed-routes-only: "false"
           profile: desktop
           performance-min-score: "0.85"
           accessibility-min-score: "0.95"
