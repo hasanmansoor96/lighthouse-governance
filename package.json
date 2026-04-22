@@ -12,6 +12,13 @@
     "routes": "node bin/lighthouse-governance.mjs routes --stdout",
     "config": "node bin/lighthouse-governance.mjs config --stdout"
   },
+  "dependencies": {
+    "@lhci/cli": "0.15.1"
+  },
+  "overrides": {
+    "chrome-launcher": "1.2.1",
+    "tmp": "0.2.5"
+  },
   "engines": {
     "node": ">=20"
   },
