@@ -11,6 +11,7 @@ Reusable Lighthouse CI governance for web projects. The action builds a project,
 - Generates an LHCI config with score and metric thresholds.
 - Fails GitHub Actions when LHCI assertions fail.
 - Optionally enforces an actionable Best Practices allowlist.
+- Posts or updates a pull request comment with the captured Lighthouse CI output and triggering commit SHA.
 - Uploads `.lighthouseci` reports as workflow artifacts.
 
 ## Use In A Project
@@ -26,6 +27,10 @@ on:
     branches:
       - main
   workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
 
 jobs:
   lighthouse:
@@ -48,6 +53,8 @@ jobs:
           tbt-max-ms: "200"
           cls-max: "0.1"
 ```
+
+Pull request comments are enabled by default for `pull_request` and `pull_request_target` events. The action updates a single sticky comment with the latest Lighthouse CI output, route count, profile, workflow run link, and the PR head commit SHA that produced the stats. Set `pr-comment: "false"` to disable this. The comment step is non-blocking; if the workflow token cannot write PR comments, the audit still runs and emits a warning.
 
 When a project has a `packageManager` field in `package.json`, leave `pnpm-version` unset so `pnpm/action-setup` can use that pinned version. Set `pnpm-version` only for pnpm projects without a package manager pin.
 
