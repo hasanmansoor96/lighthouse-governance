@@ -26,5 +26,6 @@
     "/preview"
   ],
   "includeSitemap": false,
+  "changedRoutesOnly": false,
   "failOnUnresolvedDynamicRoutes": false
 }

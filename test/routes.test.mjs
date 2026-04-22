@@ -1,13 +1,21 @@
 import assert from "node:assert/strict"
+import { execFile } from "node:child_process"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import test from "node:test"
+import { promisify } from "node:util"
 import { generateRouteManifest } from "../lib/routes.mjs"
+
+const execFileAsync = promisify(execFile)
 
 async function touch(filePath) {
   await fs.mkdir(path.dirname(filePath), { recursive: true })
   await fs.writeFile(filePath, "export default function Page() { return null }\n", "utf8")
+}
+
+async function git(projectRoot, args) {
+  await execFileAsync("git", args, { cwd: projectRoot })
 }
 
 test("discovers static routes and uses configured dynamic samples", async () => {
@@ -55,4 +63,85 @@ test("explicit routes override discovery", async () => {
 
   assert.deepEqual(manifest.routes, ["/one", "/two"])
   assert.equal(manifest.sources.discoveredStaticRoutes, 0)
+})
+
+test("changed-routes-only audits changed static routes and dynamic samples", async () => {
+  const projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), "lg-routes-changed-"))
+
+  await touch(path.join(projectRoot, "app/page.tsx"))
+  await touch(path.join(projectRoot, "app/blog/page.tsx"))
+  await touch(path.join(projectRoot, "app/blog/[slug]/page.tsx"))
+  await touch(path.join(projectRoot, "app/about/page.tsx"))
+
+  await fs.writeFile(
+    path.join(projectRoot, ".lighthouse-governance.json"),
+    `${JSON.stringify(
+      {
+        dynamicRoutes: {
+          "/blog/[slug]": ["/blog/first-post"],
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  )
+
+  const manifest = await generateRouteManifest({
+    projectRoot,
+    changedRoutesOnly: true,
+    changedFiles: ["app/blog/page.tsx", "app/blog/[slug]/page.tsx"],
+    includeSitemap: false,
+  })
+
+  assert.deepEqual(manifest.routes, ["/blog", "/blog/first-post"])
+  assert.equal(manifest.routeCount, 2)
+  assert.equal(manifest.sources.changedRoutesOnly, true)
+  assert.equal(manifest.sources.changedFiles, 2)
+  assert.equal(manifest.sources.changedStaticRoutes, 1)
+  assert.equal(manifest.sources.changedDynamicRoutes, 1)
+})
+
+test("changed-routes-only returns an empty manifest when no route changed", async () => {
+  const projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), "lg-routes-unchanged-"))
+  await touch(path.join(projectRoot, "app/page.tsx"))
+
+  const manifest = await generateRouteManifest({
+    projectRoot,
+    changedRoutesOnly: true,
+    changedFiles: ["README.md"],
+    includeSitemap: false,
+  })
+
+  assert.deepEqual(manifest.routes, [])
+  assert.equal(manifest.routeCount, 0)
+  assert.equal(manifest.sources.changedRoutesOnly, true)
+})
+
+test("changed-routes-only prefers dirty working-tree route files", async () => {
+  const projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), "lg-routes-dirty-"))
+
+  await git(projectRoot, ["init"])
+  await git(projectRoot, ["config", "user.email", "test@example.com"])
+  await git(projectRoot, ["config", "user.name", "Lighthouse Governance Test"])
+
+  await touch(path.join(projectRoot, "app/page.tsx"))
+  await touch(path.join(projectRoot, "app/maps/gta-6/page.tsx"))
+  await git(projectRoot, ["add", "."])
+  await git(projectRoot, ["commit", "-m", "initial routes"])
+
+  await fs.writeFile(
+    path.join(projectRoot, "app/maps/gta-6/page.tsx"),
+    "export default function Page() { return <main /> }\n",
+    "utf8",
+  )
+
+  const manifest = await generateRouteManifest({
+    projectRoot,
+    changedRoutesOnly: true,
+    includeSitemap: false,
+  })
+
+  assert.deepEqual(manifest.routes, ["/maps/gta-6"])
+  assert.equal(manifest.sources.changedFilesSource, "git:working-tree")
 })

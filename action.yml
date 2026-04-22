@@ -78,6 +78,14 @@ inputs:
     description: Fail route generation if dynamic pages do not have configured samples.
     required: false
     default: "false"
+  changed-routes-only:
+    description: Audit only routes whose Next.js route files changed in the triggering diff.
+    required: false
+    default: "false"
+  changed-files:
+    description: Optional comma- or newline-separated changed file list. Leave blank to infer from Git.
+    required: false
+    default: ""
   number-of-runs:
     description: LHCI numberOfRuns per route.
     required: false
@@ -134,6 +142,11 @@ inputs:
     description: Upload .lighthouseci as a workflow artifact.
     required: false
     default: "true"
+
+outputs:
+  route-count:
+    description: Number of routes selected for this run.
+    value: ${{ steps.routes.outputs.route-count }}
 
 runs:
   using: composite
@@ -238,6 +251,7 @@ runs:
         fi
 
     - name: Generate Lighthouse route manifest
+      id: routes
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
@@ -250,6 +264,8 @@ runs:
         PAGES_DIR: ${{ inputs.pages-dir }}
         INCLUDE_SITEMAP: ${{ inputs.include-sitemap }}
         FAIL_ON_UNRESOLVED_DYNAMIC_ROUTES: ${{ inputs.fail-on-unresolved-dynamic-routes }}
+        CHANGED_ROUTES_ONLY: ${{ inputs.changed-routes-only }}
+        CHANGED_FILES: ${{ inputs.changed-files }}
       run: |
         set -euo pipefail
         mkdir -p .lighthouseci
@@ -279,10 +295,23 @@ runs:
         if [ "$FAIL_ON_UNRESOLVED_DYNAMIC_ROUTES" = "true" ]; then
           args+=(--fail-on-unresolved-dynamic-routes)
         fi
+        if [ "$CHANGED_ROUTES_ONLY" = "true" ]; then
+          args+=(--changed-routes-only)
+        fi
+        if [ -n "$CHANGED_FILES" ]; then
+          args+=(--changed-files "$CHANGED_FILES")
+        fi
 
         node "$GITHUB_ACTION_PATH/bin/lighthouse-governance.mjs" "${args[@]}"
 
+        route_count="$(node -e 'const fs = require("node:fs"); const manifest = JSON.parse(fs.readFileSync(".lighthouseci/routes.json", "utf8")); console.log(manifest.routeCount ?? (Array.isArray(manifest.routes) ? manifest.routes.length : 0));')"
+        echo "route-count=$route_count" >> "$GITHUB_OUTPUT"
+        if [ "$route_count" = "0" ]; then
+          echo "[lighthouse-governance] no routes selected; LHCI steps will be skipped"
+        fi
+
     - name: Generate LHCI config
+      if: ${{ steps.routes.outputs.route-count != '0' }}
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
@@ -322,6 +351,7 @@ runs:
           --errors-in-console-min-score "$ERRORS_IN_CONSOLE_MIN_SCORE"
 
     - name: Run Lighthouse CI
+      if: ${{ steps.routes.outputs.route-count != '0' }}
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
@@ -345,7 +375,7 @@ runs:
         npx --yes "@lhci/cli@${{ inputs.lhci-version }}" autorun --config=.lighthouseci/lighthouserc.cjs
 
     - name: Assert actionable Best Practices
-      if: ${{ inputs.enforce-best-practices-allowlist == 'true' }}
+      if: ${{ inputs.enforce-best-practices-allowlist == 'true' && steps.routes.outputs.route-count != '0' }}
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
