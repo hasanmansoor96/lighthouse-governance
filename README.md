@@ -16,7 +16,7 @@ Reusable Lighthouse CI governance for web projects. The action builds a project,
 
 ## Use In A Project
 
-After this repo is pushed to GitHub, add a workflow like this to a project:
+Add a workflow like this to the project you want to audit:
 
 ```yaml
 name: lighthouse-governance
@@ -31,6 +31,7 @@ on:
 permissions:
   contents: read
   issues: write
+  pull-requests: write
 
 jobs:
   lighthouse:
@@ -57,7 +58,6 @@ jobs:
 Pull request comments are enabled by default for `pull_request` and `pull_request_target` events. The action updates a single sticky comment with the latest Lighthouse CI output, route count, profile, workflow run link, and the PR head commit SHA that produced the stats. Set `pr-comment: "false"` to disable this. The comment step is non-blocking; if the workflow token cannot write PR comments, the audit still runs and emits a warning.
 
 When a project has a `packageManager` field in `package.json`, leave `pnpm-version` unset so `pnpm/action-setup` can use that pinned version. Set `pnpm-version` only for pnpm projects without a package manager pin.
-
 
 ## Route Configuration
 
@@ -89,6 +89,10 @@ See `examples/lighthouse-governance.config.json` for a project-neutral starter c
 Set `changed-routes-only: "true"` to audit only Next.js routes touched by the pull request, push, or local commit diff:
 
 ```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+
 - uses: hasanmansoor96/lighthouse-governance@v1
   with:
     package-manager: pnpm
@@ -98,7 +102,7 @@ Set `changed-routes-only: "true"` to audit only Next.js routes touched by the pu
 
 This mode maps changed files under configured `app`/`pages` directories to routes. Dynamic route files still need samples in `dynamicRoutes`; for example a changed `/blog/[slug]` page audits the configured `/blog/launch-notes` sample. If no route is selected, the generated manifest has `routeCount: 0` and the action skips LHCI and Best Practices checks.
 
-By default, changed files are inferred from the GitHub event and local Git history. For custom triggers, pass a comma- or newline-separated list through `changed-files`.
+By default, changed files are inferred from the GitHub event and local Git history. Use `fetch-depth: 0` with `actions/checkout` so pull request and push comparisons have the needed base commits locally. For custom triggers, pass a comma- or newline-separated list through `changed-files`.
 
 ## Local Commands
 
