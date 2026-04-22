@@ -91,7 +91,7 @@ inputs:
     required: false
     default: "1"
   lhci-version:
-    description: "@lhci/cli version used by npx. Use latest for the npm dist tag or pin an exact version for reproducible CI."
+    description: "@lhci/cli version expected from the action's locked runner. Use latest or 0.15.1."
     required: false
     default: "latest"
   upload-target:
@@ -354,6 +354,24 @@ runs:
           --cls-max "$CLS_MAX" \
           --errors-in-console-min-score "$ERRORS_IN_CONSOLE_MIN_SCORE"
 
+    - name: Install Lighthouse CI runner
+      if: ${{ steps.routes.outputs.route-count != '0' }}
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        LHCI_VERSION_INPUT: ${{ inputs.lhci-version }}
+      run: |
+        set -euo pipefail
+        npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+
+        installed_version="$(node -p 'require("./node_modules/@lhci/cli/package.json").version')"
+        if [ "$LHCI_VERSION_INPUT" != "latest" ] && [ "$LHCI_VERSION_INPUT" != "$installed_version" ]; then
+          echo "::error::This action is locked to @lhci/cli@$installed_version to apply dependency overrides. Requested lhci-version was $LHCI_VERSION_INPUT."
+          exit 1
+        fi
+
+        echo "LG_LHCI_BIN=$GITHUB_ACTION_PATH/node_modules/.bin/lhci" >> "$GITHUB_ENV"
+
     - name: Run Lighthouse CI
       if: ${{ steps.routes.outputs.route-count != '0' }}
       shell: bash
@@ -379,7 +397,7 @@ runs:
         mkdir -p .lighthouseci
 
         set +e
-        npx --yes "@lhci/cli@${{ inputs.lhci-version }}" autorun --config=.lighthouseci/lighthouserc.cjs 2>&1 | tee .lighthouseci/lhci-output.log
+        "$LG_LHCI_BIN" autorun --config=.lighthouseci/lighthouserc.cjs 2>&1 | tee .lighthouseci/lhci-output.log
         lhci_status="${PIPESTATUS[0]}"
         set -e
 
