@@ -47,3 +47,54 @@ test("createPrCommentBody includes run metadata and captured Lighthouse output",
   assert.match(body, /done running Lighthouse!/u)
   assert.doesNotMatch(body, /\u001B/u)
 })
+
+test("createPrCommentBody renders separate sections for multi-profile runs", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "lighthouse-governance-multi-"))
+  const lhciDir = path.join(tempDir, ".lighthouseci")
+  await fs.mkdir(lhciDir)
+
+  await fs.writeFile(path.join(lhciDir, "lhci-output-desktop.log"), "desktop output\n", "utf8")
+  await fs.writeFile(path.join(lhciDir, "lhci-exit-code-desktop.txt"), "0\n", "utf8")
+  await fs.writeFile(path.join(lhciDir, "lhci-output-mobile.log"), "mobile output\n", "utf8")
+  await fs.writeFile(path.join(lhciDir, "lhci-exit-code-mobile.txt"), "1\n", "utf8")
+  await fs.writeFile(
+    path.join(lhciDir, "profile-results.json"),
+    `${JSON.stringify(
+      {
+        results: [
+          {
+            profile: "desktop",
+            routeCount: 12,
+            outputPath: ".lighthouseci/lhci-output-desktop.log",
+            exitCodePath: ".lighthouseci/lhci-exit-code-desktop.txt",
+          },
+          {
+            profile: "mobile",
+            routeCount: 8,
+            outputPath: ".lighthouseci/lhci-output-mobile.log",
+            exitCodePath: ".lighthouseci/lhci-exit-code-mobile.txt",
+          },
+        ],
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  )
+
+  const body = await createPrCommentBody({
+    workingDirectory: tempDir,
+    commitSha: "abcdef123456",
+    profileResultsPath: ".lighthouseci/profile-results.json",
+    workflowUrl: "https://github.com/example/repo/actions/runs/2",
+  })
+
+  assert.match(body, /Commit: `abcdef123456`/u)
+  assert.match(body, /Status: `failed`/u)
+  assert.match(body, /Profiles: `desktop, mobile`/u)
+  assert.match(body, /Routes audited: `desktop: 12, mobile: 8`/u)
+  assert.match(body, /### Desktop/u)
+  assert.match(body, /### Mobile/u)
+  assert.match(body, /desktop output/u)
+  assert.match(body, /mobile output/u)
+})

@@ -32,11 +32,14 @@ jobs:
           start-server-command: pnpm start --hostname=127.0.0.1 --port=3100
           route-config-file: lighthouse-governance.config.json
           changed-routes-only: "false"
-          profile: desktop
+          profiles: desktop,mobile
           performance-min-score: "0.85"
           accessibility-min-score: "0.95"
           seo-min-score: "0.95"
           lcp-max-ms: "2500"
+          inp-max-ms: "200"
+          fcp-max-ms: "1800"
+          ttfb-max-ms: "800"
           tbt-max-ms: "200"
           cls-max: "0.1"
           errors-in-console-min-score: "1"

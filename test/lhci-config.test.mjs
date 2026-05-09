@@ -8,10 +8,14 @@ test("generated LHCI config contains threshold assertions and runtime env hooks"
     routesFile: ".lighthouseci/routes.json",
     performanceMinScore: "0.8",
     bestPracticesMinScore: "0.9",
+    fcpMaxMs: "1800",
+    ttfbMaxMs: "800",
   })
 
   assert.match(source, /LIGHTHOUSE_PERFORMANCE_MIN_SCORE/u)
   assert.match(source, /categories:best-practices/u)
+  assert.match(source, /first-contentful-paint/u)
+  assert.match(source, /server-response-time/u)
   assert.match(source, /LHCI_START_SERVER_COMMAND/u)
   assert.match(source, /temporary-public-storage/u)
 })

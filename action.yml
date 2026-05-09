@@ -46,10 +46,10 @@ inputs:
     description: Port used by the inferred start command.
     required: false
     default: "3100"
-  profile:
-    description: Lighthouse profile, desktop or mobile.
+  profiles:
+    description: "Comma- or newline-separated Lighthouse profiles to audit. Supported values: desktop, mobile."
     required: false
-    default: "desktop"
+    default: ""
   routes:
     description: Comma-separated route list. When set, these routes are audited instead of discovery.
     required: false
@@ -118,6 +118,18 @@ inputs:
     description: Largest Contentful Paint maximum in milliseconds. Empty disables this assertion.
     required: false
     default: "2500"
+  inp-max-ms:
+    description: Interaction to Next Paint maximum in milliseconds. Empty disables this assertion.
+    required: false
+    default: "200"
+  fcp-max-ms:
+    description: First Contentful Paint maximum in milliseconds. Empty disables this assertion.
+    required: false
+    default: "1800"
+  ttfb-max-ms:
+    description: Time to First Byte maximum in milliseconds. Empty disables this assertion.
+    required: false
+    default: "800"
   tbt-max-ms:
     description: Total Blocking Time maximum in milliseconds. Empty disables this assertion.
     required: false
@@ -149,7 +161,7 @@ inputs:
 
 outputs:
   route-count:
-    description: Number of routes selected for this run.
+    description: Total number of routes selected across all audited profiles.
     value: ${{ steps.routes.outputs.route-count }}
 
 runs:
@@ -169,6 +181,51 @@ runs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
+
+    - name: Resolve Lighthouse profiles
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        PROFILES_INPUT: ${{ inputs.profiles }}
+      run: |
+        set -euo pipefail
+
+        normalize_profiles() {
+          local raw="${PROFILES_INPUT:-}"
+
+          local normalized=""
+          local token=""
+          local cleaned
+          cleaned="$(printf '%s' "$raw" | tr ',\n' '  ')"
+
+          for token in $cleaned; do
+            token="$(printf '%s' "$token" | tr '[:upper:]' '[:lower:]')"
+            case "$token" in
+              desktop|mobile)
+                if [ -z "$normalized" ]; then
+                  normalized="$token"
+                elif [[ ",$normalized," != *",$token,"* ]]; then
+                  normalized="$normalized,$token"
+                fi
+                ;;
+              "")
+                ;;
+              *)
+                echo "::error::Unsupported Lighthouse profile '$token'. Supported values: desktop, mobile."
+                exit 1
+                ;;
+            esac
+          done
+
+          if [ -z "$normalized" ]; then
+            normalized="desktop"
+          fi
+
+          printf '%s\n' "$normalized"
+        }
+
+        resolved_profiles="$(normalize_profiles)"
+        echo "LG_PROFILES=$resolved_profiles" >> "$GITHUB_ENV"
 
     - name: Resolve Lighthouse governance commands
       shell: bash
@@ -260,7 +317,6 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       env:
         BASE_URL: ${{ inputs.base-url }}
-        PROFILE: ${{ inputs.profile }}
         ROUTES: ${{ inputs.routes }}
         ROUTES_FILE_INPUT: ${{ inputs.routes-file }}
         ROUTE_CONFIG_FILE: ${{ inputs.route-config-file }}
@@ -274,43 +330,60 @@ runs:
         set -euo pipefail
         mkdir -p .lighthouseci
 
-        args=(
-          routes
-          --project-root "$PWD"
-          --base-url "$BASE_URL"
-          --profile "$PROFILE"
-          --output ".lighthouseci/routes.json"
-          --app-dir "$APP_DIR"
-          --pages-dir "$PAGES_DIR"
-        )
+        total_route_count=0
+        audited_profiles=""
 
-        if [ -n "$ROUTES" ]; then
-          args+=(--routes "$ROUTES")
-        fi
-        if [ -n "$ROUTES_FILE_INPUT" ]; then
-          args+=(--routes-file "$ROUTES_FILE_INPUT")
-        fi
-        if [ -n "$ROUTE_CONFIG_FILE" ]; then
-          args+=(--config "$ROUTE_CONFIG_FILE")
-        fi
-        if [ "$INCLUDE_SITEMAP" = "true" ]; then
-          args+=(--include-sitemap)
-        fi
-        if [ "$FAIL_ON_UNRESOLVED_DYNAMIC_ROUTES" = "true" ]; then
-          args+=(--fail-on-unresolved-dynamic-routes)
-        fi
-        if [ "$CHANGED_ROUTES_ONLY" = "true" ]; then
-          args+=(--changed-routes-only)
-        fi
-        if [ -n "$CHANGED_FILES" ]; then
-          args+=(--changed-files "$CHANGED_FILES")
-        fi
+        for profile in ${LG_PROFILES//,/ }; do
+          routes_file=".lighthouseci/routes-${profile}.json"
+          args=(
+            routes
+            --project-root "$PWD"
+            --base-url "$BASE_URL"
+            --profile "$profile"
+            --output "$routes_file"
+            --app-dir "$APP_DIR"
+            --pages-dir "$PAGES_DIR"
+          )
 
-        node "$GITHUB_ACTION_PATH/bin/lighthouse-governance.mjs" "${args[@]}"
+          if [ -n "$ROUTES" ]; then
+            args+=(--routes "$ROUTES")
+          fi
+          if [ -n "$ROUTES_FILE_INPUT" ]; then
+            args+=(--routes-file "$ROUTES_FILE_INPUT")
+          fi
+          if [ -n "$ROUTE_CONFIG_FILE" ]; then
+            args+=(--config "$ROUTE_CONFIG_FILE")
+          fi
+          if [ "$INCLUDE_SITEMAP" = "true" ]; then
+            args+=(--include-sitemap)
+          fi
+          if [ "$FAIL_ON_UNRESOLVED_DYNAMIC_ROUTES" = "true" ]; then
+            args+=(--fail-on-unresolved-dynamic-routes)
+          fi
+          if [ "$CHANGED_ROUTES_ONLY" = "true" ]; then
+            args+=(--changed-routes-only)
+          fi
+          if [ -n "$CHANGED_FILES" ]; then
+            args+=(--changed-files "$CHANGED_FILES")
+          fi
 
-        route_count="$(node -e 'const fs = require("node:fs"); const manifest = JSON.parse(fs.readFileSync(".lighthouseci/routes.json", "utf8")); console.log(manifest.routeCount ?? (Array.isArray(manifest.routes) ? manifest.routes.length : 0));')"
-        echo "route-count=$route_count" >> "$GITHUB_OUTPUT"
-        if [ "$route_count" = "0" ]; then
+          node "$GITHUB_ACTION_PATH/bin/lighthouse-governance.mjs" "${args[@]}"
+
+          route_count="$(node -e 'const fs = require("node:fs"); const manifest = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); console.log(manifest.routeCount ?? (Array.isArray(manifest.routes) ? manifest.routes.length : 0));' "$routes_file")"
+          total_route_count="$((total_route_count + route_count))"
+
+          if [ "$route_count" != "0" ]; then
+            if [ -z "$audited_profiles" ]; then
+              audited_profiles="$profile"
+            else
+              audited_profiles="$audited_profiles,$profile"
+            fi
+          fi
+        done
+
+        echo "route-count=$total_route_count" >> "$GITHUB_OUTPUT"
+        echo "LG_AUDITED_PROFILES=$audited_profiles" >> "$GITHUB_ENV"
+        if [ "$total_route_count" = "0" ]; then
           echo "[lighthouse-governance] no routes selected; LHCI steps will be skipped"
         fi
 
@@ -320,7 +393,6 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       env:
         BASE_URL: ${{ inputs.base-url }}
-        PROFILE: ${{ inputs.profile }}
         START_SERVER_READY_PATTERN: ${{ inputs.start-server-ready-pattern }}
         START_SERVER_READY_TIMEOUT: ${{ inputs.start-server-ready-timeout }}
         NUMBER_OF_RUNS: ${{ inputs.number-of-runs }}
@@ -330,29 +402,35 @@ runs:
         BEST_PRACTICES_MIN_SCORE: ${{ inputs.best-practices-min-score }}
         SEO_MIN_SCORE: ${{ inputs.seo-min-score }}
         LCP_MAX_MS: ${{ inputs.lcp-max-ms }}
+        FCP_MAX_MS: ${{ inputs.fcp-max-ms }}
+        TTFB_MAX_MS: ${{ inputs.ttfb-max-ms }}
         TBT_MAX_MS: ${{ inputs.tbt-max-ms }}
         CLS_MAX: ${{ inputs.cls-max }}
         ERRORS_IN_CONSOLE_MIN_SCORE: ${{ inputs.errors-in-console-min-score }}
       run: |
         set -euo pipefail
-        node "$GITHUB_ACTION_PATH/bin/lighthouse-governance.mjs" config \
-          --project-root "$PWD" \
-          --base-url "$BASE_URL" \
-          --profile "$PROFILE" \
-          --routes-file ".lighthouseci/routes.json" \
-          --output ".lighthouseci/lighthouserc.cjs" \
-          --start-server-ready-pattern "$START_SERVER_READY_PATTERN" \
-          --start-server-ready-timeout "$START_SERVER_READY_TIMEOUT" \
-          --number-of-runs "$NUMBER_OF_RUNS" \
-          --upload-target "$UPLOAD_TARGET" \
-          --performance-min-score "$PERFORMANCE_MIN_SCORE" \
-          --accessibility-min-score "$ACCESSIBILITY_MIN_SCORE" \
-          --best-practices-min-score "$BEST_PRACTICES_MIN_SCORE" \
-          --seo-min-score "$SEO_MIN_SCORE" \
-          --lcp-max-ms "$LCP_MAX_MS" \
-          --tbt-max-ms "$TBT_MAX_MS" \
-          --cls-max "$CLS_MAX" \
-          --errors-in-console-min-score "$ERRORS_IN_CONSOLE_MIN_SCORE"
+        for profile in ${LG_AUDITED_PROFILES//,/ }; do
+          node "$GITHUB_ACTION_PATH/bin/lighthouse-governance.mjs" config \
+            --project-root "$PWD" \
+            --base-url "$BASE_URL" \
+            --profile "$profile" \
+            --routes-file ".lighthouseci/routes-${profile}.json" \
+            --output ".lighthouseci/lighthouserc-${profile}.cjs" \
+            --start-server-ready-pattern "$START_SERVER_READY_PATTERN" \
+            --start-server-ready-timeout "$START_SERVER_READY_TIMEOUT" \
+            --number-of-runs "$NUMBER_OF_RUNS" \
+            --upload-target "$UPLOAD_TARGET" \
+            --performance-min-score "$PERFORMANCE_MIN_SCORE" \
+            --accessibility-min-score "$ACCESSIBILITY_MIN_SCORE" \
+            --best-practices-min-score "$BEST_PRACTICES_MIN_SCORE" \
+            --seo-min-score "$SEO_MIN_SCORE" \
+            --lcp-max-ms "$LCP_MAX_MS" \
+            --fcp-max-ms "$FCP_MAX_MS" \
+            --ttfb-max-ms "$TTFB_MAX_MS" \
+            --tbt-max-ms "$TBT_MAX_MS" \
+            --cls-max "$CLS_MAX" \
+            --errors-in-console-min-score "$ERRORS_IN_CONSOLE_MIN_SCORE"
+        done
 
     - name: Install Lighthouse CI runner
       if: ${{ steps.routes.outputs.route-count != '0' }}
@@ -378,8 +456,6 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       env:
         LHCI_BASE_URL: ${{ inputs.base-url }}
-        LHCI_PROFILE: ${{ inputs.profile }}
-        LHCI_ROUTES_FILE: .lighthouseci/routes.json
         LHCI_START_SERVER_READY_PATTERN: ${{ inputs.start-server-ready-pattern }}
         LHCI_START_SERVER_READY_TIMEOUT: ${{ inputs.start-server-ready-timeout }}
         LHCI_NUMBER_OF_RUNS: ${{ inputs.number-of-runs }}
@@ -389,6 +465,9 @@ runs:
         LIGHTHOUSE_BEST_PRACTICES_MIN_SCORE: ${{ inputs.best-practices-min-score }}
         LIGHTHOUSE_SEO_MIN_SCORE: ${{ inputs.seo-min-score }}
         LIGHTHOUSE_LCP_MAX_MS: ${{ inputs.lcp-max-ms }}
+        LIGHTHOUSE_INP_MAX_MS: ${{ inputs.inp-max-ms }}
+        LIGHTHOUSE_FCP_MAX_MS: ${{ inputs.fcp-max-ms }}
+        LIGHTHOUSE_TTFB_MAX_MS: ${{ inputs.ttfb-max-ms }}
         LIGHTHOUSE_TBT_MAX_MS: ${{ inputs.tbt-max-ms }}
         LIGHTHOUSE_CLS_MAX: ${{ inputs.cls-max }}
         LIGHTHOUSE_ERRORS_IN_CONSOLE_MIN_SCORE: ${{ inputs.errors-in-console-min-score }}
@@ -396,13 +475,67 @@ runs:
         set -euo pipefail
         mkdir -p .lighthouseci
 
-        set +e
-        "$LG_LHCI_BIN" autorun --config=.lighthouseci/lighthouserc.cjs 2>&1 | tee .lighthouseci/lhci-output.log
-        lhci_status="${PIPESTATUS[0]}"
-        set -e
+        profile_results_path=".lighthouseci/profile-results.json"
+        overall_status=0
 
-        printf '%s\n' "$lhci_status" > .lighthouseci/lhci-exit-code.txt
-        exit "$lhci_status"
+        : > .lighthouseci/lhci-output.log
+        node -e 'const fs = require("node:fs"); fs.writeFileSync(process.argv[1], JSON.stringify({ results: [] }, null, 2) + "\n", "utf8")' "$profile_results_path"
+
+        for profile in ${LG_AUDITED_PROFILES//,/ }; do
+          routes_file=".lighthouseci/routes-${profile}.json"
+          config_file=".lighthouseci/lighthouserc-${profile}.cjs"
+          log_file=".lighthouseci/lhci-output-${profile}.log"
+          exit_code_file=".lighthouseci/lhci-exit-code-${profile}.txt"
+          marker_file=".lighthouseci/lhci-start-${profile}.marker"
+          inp_status=0
+          route_count="$(node -e 'const fs = require("node:fs"); const manifest = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); console.log(manifest.routeCount ?? (Array.isArray(manifest.routes) ? manifest.routes.length : 0));' "$routes_file")"
+
+          : > "$marker_file"
+          set +e
+          LHCI_PROFILE="$profile" LHCI_ROUTES_FILE="$routes_file" "$LG_LHCI_BIN" autorun --config="$config_file" 2>&1 | tee "$log_file"
+          lhci_status="${PIPESTATUS[0]}"
+          set -e
+
+          if [ "$lhci_status" -ne 0 ]; then
+            overall_status=1
+          fi
+
+          if [ -n "$LIGHTHOUSE_INP_MAX_MS" ]; then
+            report_files="$(find .lighthouseci -maxdepth 1 -type f -name 'lhr-*.json' -newer "$marker_file" -print | sort | paste -sd, -)"
+            if [ -n "$report_files" ]; then
+              set +e
+              node "$GITHUB_ACTION_PATH/bin/lighthouse-governance.mjs" assert-metric \
+                --project-root "$PWD" \
+                --report-files "$report_files" \
+                --audit-id "interaction-to-next-paint" \
+                --max-numeric-value "$LIGHTHOUSE_INP_MAX_MS" 2>&1 | tee -a "$log_file"
+              inp_status="${PIPESTATUS[0]}"
+              set -e
+
+              if [ "$inp_status" -ne 0 ]; then
+                overall_status=1
+              fi
+            fi
+          fi
+
+          printf '=== %s ===\n' "$profile" >> .lighthouseci/lhci-output.log
+          cat "$log_file" >> .lighthouseci/lhci-output.log
+          printf '\n' >> .lighthouseci/lhci-output.log
+
+          profile_status=0
+          if [ "$lhci_status" -ne 0 ]; then
+            profile_status=1
+          fi
+          if [ "$inp_status" -ne 0 ]; then
+            profile_status=1
+          fi
+          printf '%s\n' "$profile_status" > "$exit_code_file"
+
+          PROFILE_RESULT_PATH="$profile_results_path" PROFILE="$profile" ROUTE_COUNT="$route_count" OUTPUT_PATH="$log_file" EXIT_CODE_PATH="$exit_code_file" node -e 'const fs = require("node:fs"); const filePath = process.env.PROFILE_RESULT_PATH; let parsed = { results: [] }; try { parsed = JSON.parse(fs.readFileSync(filePath, "utf8")); } catch {} if (!parsed || !Array.isArray(parsed.results)) parsed = { results: [] }; parsed.results.push({ profile: process.env.PROFILE, routeCount: Number(process.env.ROUTE_COUNT || 0), outputPath: process.env.OUTPUT_PATH, exitCodePath: process.env.EXIT_CODE_PATH }); fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2) + "\n", "utf8")'
+        done
+
+        printf '%s\n' "$overall_status" > .lighthouseci/lhci-exit-code.txt
+        exit "$overall_status"
 
     - name: Assert actionable Best Practices
       if: ${{ inputs.enforce-best-practices-allowlist == 'true' && steps.routes.outputs.route-count != '0' }}
@@ -423,7 +556,7 @@ runs:
         LG_ACTION_PATH: ${{ github.action_path }}
         LG_WORKING_DIRECTORY: ${{ inputs.working-directory }}
         LG_ROUTE_COUNT: ${{ steps.routes.outputs.route-count }}
-        LG_PROFILE: ${{ inputs.profile }}
+        LG_PROFILE_RESULTS_PATH: .lighthouseci/profile-results.json
       with:
         script: |
           const path = require("node:path")
@@ -455,7 +588,7 @@ runs:
               workingDirectory,
               commitSha: pullRequest.head?.sha || context.sha,
               routeCount: process.env.LG_ROUTE_COUNT,
-              profile: process.env.LG_PROFILE,
+              profileResultsPath: process.env.LG_PROFILE_RESULTS_PATH,
               workflowUrl,
             })
 
