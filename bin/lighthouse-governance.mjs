@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-import { writeFile } from "node:fs/promises"
 import path from "node:path"
 import { assertBestPractices } from "../lib/best-practices.mjs"
 import { createLhciConfigSource, writeLhciConfig } from "../lib/lhci-config.mjs"
+import { assertMetricThreshold } from "../lib/metric-assertions.mjs"
 import { splitList, writeRouteManifest } from "../lib/routes.mjs"
 
 function usage() {
@@ -11,11 +11,13 @@ function usage() {
   lighthouse-governance routes [options]
   lighthouse-governance config [options]
   lighthouse-governance best-practices [options]
+  lighthouse-governance assert-metric [options]
 
 Commands:
   routes          Generate .lighthouseci/routes.json from configured routes and/or project route discovery.
   config          Generate .lighthouseci/lighthouserc.cjs with threshold assertions.
   best-practices  Fail on non-allowlisted Best Practices audit failures in Lighthouse reports.
+  assert-metric   Assert a max numeric value threshold for a Lighthouse audit from generated reports.
 `
 }
 
@@ -119,6 +121,8 @@ async function runConfig(options) {
     bestPracticesMinScore: options.bestPracticesMinScore,
     seoMinScore: options.seoMinScore,
     lcpMaxMs: options.lcpMaxMs,
+    fcpMaxMs: options.fcpMaxMs,
+    ttfbMaxMs: options.ttfbMaxMs,
     tbtMaxMs: options.tbtMaxMs,
     clsMax: options.clsMax,
     errorsInConsoleMinScore: options.errorsInConsoleMinScore,
@@ -155,6 +159,38 @@ async function runBestPractices(options) {
   console.log(`[lighthouse-governance] allowlisted failures observed: ${result.allowlistedFailures.length}`)
 }
 
+async function runMetricAssertion(options) {
+  const result = await assertMetricThreshold({
+    projectRoot: options.projectRoot,
+    reportDir: options.reportDir,
+    reportFiles: options.reportFiles,
+    auditId: options.auditId,
+    maxNumericValue: options.maxNumericValue,
+    aggregationMethod: options.aggregationMethod,
+  })
+
+  if (result.status === "skipped") {
+    const unavailableSuffix = result.auditId === "interaction-to-next-paint"
+      ? " Lighthouse 12 only emits this audit in timespan/user-flow reports."
+      : ""
+    console.warn(`[lighthouse-governance] ${result.auditId} did not produce numeric values in generated Lighthouse reports; skipped threshold assertion.${unavailableSuffix}`)
+    return
+  }
+
+  if (result.failures.length > 0) {
+    console.error(`[lighthouse-governance] ${result.auditId} threshold check failed`)
+    for (const failure of result.failures) {
+      const values = failure.values.map((value) => `${Math.round(value * 100) / 100}`).join(", ")
+      console.error(` - ${failure.url} -> ${failure.actual} > ${result.maxNumericValue} (runs: ${values})`)
+    }
+    process.exit(1)
+  }
+
+  console.log(`[lighthouse-governance] ${result.auditId} threshold check passed`)
+  console.log(`[lighthouse-governance] reports scanned: ${result.reportCount}`)
+  console.log(`[lighthouse-governance] URLs evaluated: ${result.evaluatedCount}`)
+}
+
 async function main() {
   const [command, ...rest] = process.argv.slice(2)
   const options = parseArgs(rest)
@@ -176,6 +212,11 @@ async function main() {
 
   if (command === "best-practices") {
     await runBestPractices(options)
+    return
+  }
+
+  if (command === "assert-metric") {
+    await runMetricAssertion(options)
     return
   }
 

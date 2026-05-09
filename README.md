@@ -47,16 +47,20 @@ jobs:
           lhci-version: "0.15.1"
           start-server-command: pnpm start --hostname=127.0.0.1 --port=3100
           route-config-file: lighthouse-governance.config.json
+          profiles: desktop,mobile
           changed-routes-only: "false"
           performance-min-score: "0.85"
           accessibility-min-score: "0.95"
           seo-min-score: "0.95"
           lcp-max-ms: "2500"
+          inp-max-ms: "200"
+          fcp-max-ms: "1800"
+          ttfb-max-ms: "800"
           tbt-max-ms: "200"
           cls-max: "0.1"
 ```
 
-Pull request comments are enabled by default for `pull_request` and `pull_request_target` events. The action updates a single sticky comment with the latest Lighthouse CI output, route count, profile, workflow run link, and the PR head commit SHA that produced the stats. Set `pr-comment: "false"` to disable this. The comment step is non-blocking; if the workflow token cannot write PR comments, the audit still runs and emits a warning.
+Pull request comments are enabled by default for `pull_request` and `pull_request_target` events. The action updates a single sticky comment with the latest Lighthouse CI output, route counts, audited profile list, workflow run link, and the PR head commit SHA that produced the stats. When `profiles` contains both desktop and mobile, the comment renders a separate section for each profile. Set `pr-comment: "false"` to disable this. The comment step is non-blocking; if the workflow token cannot write PR comments, the audit still runs and emits a warning.
 
 ![Lighthouse Governance pull request comment showing Lighthouse CI output](docs/assets/pr-comment.png)
 
@@ -102,6 +106,7 @@ Set `changed-routes-only: "true"` to audit only Next.js routes touched by the pu
   with:
     package-manager: pnpm
     route-config-file: lighthouse-governance.config.json
+    profiles: desktop,mobile
     changed-routes-only: "true"
 ```
 
@@ -137,18 +142,24 @@ node bin/lighthouse-governance.mjs best-practices --project-root /path/to/projec
 
 ## Thresholds
 
-The action exposes these inputs and mirrors them to the generated LHCI config:
+The action exposes these inputs for LHCI assertions and supplemental report checks:
 
+- `profiles`, defaults to `desktop` when omitted; accepts `desktop`, `mobile`, or a comma-separated combination such as `desktop,mobile`
 - `performance-min-score`, default `0.85`
 - `accessibility-min-score`, default `0.95`
 - `best-practices-min-score`, default empty so it is disabled
 - `seo-min-score`, default `0.95`
 - `lcp-max-ms`, default `2500`
+- `inp-max-ms`, default `200`
+- `fcp-max-ms`, default `1800`
+- `ttfb-max-ms`, default `800`
 - `tbt-max-ms`, default `200`
 - `cls-max`, default `0.1`
 - `errors-in-console-min-score`, default `1`
 
 Empty threshold inputs are skipped.
+
+`inp-max-ms` is evaluated from generated Lighthouse reports after LHCI completes. Lighthouse 12 only emits `interaction-to-next-paint` in timespan or user-flow reports, so standard navigation audits can log a skip instead of a pass/fail when that metric is unavailable.
 
 ## Contributors
 
